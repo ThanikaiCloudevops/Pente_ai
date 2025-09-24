@@ -2,3 +2,4 @@ flask
 boto3
 pytest
 flake8
+pytest-mock
