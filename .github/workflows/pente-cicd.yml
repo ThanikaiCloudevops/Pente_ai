@@ -36,6 +36,11 @@ jobs:
       - name: Run unit tests
         run: pytest app/
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.7
+
       - name: Terraform fmt & validate
         run: |
           cd terraform
