@@ -1,47 +1,5 @@
-resource "aws_eks_cluster" "main" {
-  name     = var.cluster_name
-  role_arn = aws_iam_role.eks_cluster.arn
-
-  vpc_config {
-    subnet_ids         = concat(var.public_subnets, var.private_subnets)
-    security_group_ids = [aws_security_group.eks_cluster.id]
-  }
-
-  depends_on = [aws_iam_role_policy_attachment.eks_cluster]
-}
-
-resource "aws_eks_node_group" "main" {
-  for_each        = toset(["group1", "group2"])
-  cluster_name    = aws_eks_cluster.main.name
-  node_group_name = "${var.cluster_name}-${each.key}"
-  node_role_arn   = aws_iam_role.eks_node.arn
-  subnet_ids      = var.private_subnets
-  instance_types  = ["t3.medium"]
-
-  scaling_config {
-    desired_size = 2
-    max_size     = 3
-    min_size     = 1
-  }
-
-  depends_on = [aws_iam_role_policy_attachment.eks_node]
-}
-
-resource "aws_autoscaling_policy" "cpu" {
-  for_each            = aws_eks_node_group.main
-  name                = "${each.key}-cpu-policy"
-  autoscaling_group_name = each.value.resources[0].autoscaling_groups[0].name
-  policy_type         = "TargetTrackingScaling"
-
-  target_tracking_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ASGAverageCPUUtilization"
-    }
-    target_value = 70.0
-  }
-}
-
 resource "aws_security_group" "eks_cluster" {
+  name   = "${var.cluster_name}-eks-sg"
   vpc_id = var.vpc_id
 
   ingress {
@@ -59,7 +17,7 @@ resource "aws_security_group" "eks_cluster" {
   }
 
   tags = {
-    Name = "eks-cluster-sg"
+    Name = "${var.cluster_name}-eks-sg"
   }
 }
 
@@ -109,6 +67,49 @@ resource "aws_iam_role_policy_attachment" "eks_registry" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+resource "aws_eks_cluster" "main" {
+  name     = var.cluster_name
+  role_arn = aws_iam_role.eks_cluster.arn
+
+  vpc_config {
+    subnet_ids         = concat(var.public_subnets, var.private_subnets)
+    security_group_ids = [aws_security_group.eks_cluster.id]
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.eks_cluster]
+}
+
+resource "aws_eks_node_group" "main" {
+  for_each        = var.node_groups
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "${var.cluster_name}-${each.key}"
+  node_role_arn   = aws_iam_role.eks_node.arn
+  subnet_ids      = var.private_subnets
+  instance_types  = each.value.instance_types
+
+  scaling_config {
+    desired_size = each.value.desired_size
+    max_size     = each.value.max_size
+    min_size     = each.value.min_size
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.eks_node]
+}
+
+resource "aws_autoscaling_policy" "cpu" {
+  for_each              = aws_eks_node_group.main
+  name                  = "${each.key}-cpu-policy"
+  autoscaling_group_name = each.value.resources[0].autoscaling_groups[0].name
+  policy_type           = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+    target_value = 70.0
+  }
+}
+
 provider "helm" {
   kubernetes {
     host                   = aws_eks_cluster.main.endpoint
@@ -122,10 +123,10 @@ provider "helm" {
 }
 
 resource "helm_release" "istio_base" {
-  name       = "istio-base"
-  repository = "https://istio-release.storage.googleapis.com/charts"
-  chart      = "base"
-  namespace  = "istio-system"
+  name             = "istio-base"
+  repository       = "https://istio-release.storage.googleapis.com/charts"
+  chart            = "base"
+  namespace        = "istio-system"
   create_namespace = true
 }
 

@@ -37,8 +37,7 @@ module "elasticache" {
   private_subnets = module.vpc.private_subnets
 }
 
-module "S3" {
-  source = "./modules/S3"
-
+module "s3" {
+  source = "./modules/s3"
   bucket_name = "my-app-assets"
 }
