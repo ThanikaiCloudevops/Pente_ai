@@ -1,6 +1,10 @@
+# Author : Thanikai 
+
 name: CI/CD Pipeline
 
 on:
+  push:
+    branches: [ "development" ]
   pull_request:
     branches: [ "main" ]
 
@@ -50,21 +54,31 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push image to ECR
+      - name: Build, tag, and push Docker image to ECR
         run: |
           IMAGE_URI=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ github.sha }}
           docker build -t $IMAGE_URI .
           docker push $IMAGE_URI
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
 
-      - name: Terraform apply non-prod
+      - name: Terraform workspace select/create
         run: |
           cd terraform
           terraform workspace new $TF_WORKSPACE || terraform workspace select $TF_WORKSPACE
-          terraform init
-          terraform apply -auto-approve -var="image_tag=${GITHUB_SHA}"
+
+      - name: Terraform plan
+        run: |
+          cd terraform
+          terraform plan -var="image_tag=${GITHUB_SHA}" -out=tfplan.binary
+
+      - name: Terraform apply
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        run: |
+          cd terraform
+          terraform apply -auto-approve tfplan.binary
 
       - name: Deploy with Helm
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
         run: |
           helm upgrade --install my-microservice-pente ./helm/my-microservice-pente \
             --set image.repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO }} \
