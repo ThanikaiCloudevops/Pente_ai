@@ -16,14 +16,14 @@ resource "aws_ecr_repository" "this" {
 
 # 2. EKS Cluster (using official AWS module)
 module "eks" {
-  source          = "terraform-aws-modules/eks/aws"
-  version         = "20.8.4" 
+  source  = "terraform-aws-modules/eks/aws"
+  version = "20.8.4"
 
   cluster_name    = "${var.app_name}-cluster"
   cluster_version = var.cluster_version
 
   vpc_id  = var.vpc_id
-  subnets = var.subnets 
+  subnets = var.subnets
 
   enable_irsa = true
 
